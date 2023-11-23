@@ -1,3 +1,3 @@
-# My first mod
+# Void Fiend Hud Tweaks
 
-Description.
+A collection of customizable tweaks for Void Fiend's corruption hud to hopefully make the convoluted mechanic a bit easier to understand for some people (aka me)
