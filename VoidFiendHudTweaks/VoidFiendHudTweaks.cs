@@ -1,18 +1,17 @@
 using BepInEx;
 using BepInEx.Configuration;
 using RoR2;
-using UnityEngine;
 using RoR2.HudOverlay;
+using RoR2.Skills;
 using RoR2.UI;
-using UnityEngine.UI;
-using TMPro;
 using System.Text;
+using TMPro;
+using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.UI;
 
 namespace VoidFiendHudTweaks
 {
-	// R2API dependency
-	[BepInDependency(R2API.R2API.PluginGUID)]
-
 	// Add Risk of Options dependency
 	[BepInDependency("com.rune580.riskofoptions", BepInDependency.DependencyFlags.SoftDependency)]
 
@@ -37,6 +36,8 @@ namespace VoidFiendHudTweaks
 		public static ConfigEntry<bool> ConfigCorruptionTimer { get; set; }
 		
 		public static ConfigEntry<bool> ConfigCorruptionDelta { get; set; }
+		public static GameObject CorruptionDeltaNumber = null;
+		public static float CorruptionDeltaElementTimer = 0f;
 		
 		public static ConfigEntry<bool> ConfigSuppressHealDelta { get; set; }
 		public static ConfigEntry<Color> ConfigSuppressHealDeltaColor { get; set; }
@@ -47,20 +48,20 @@ namespace VoidFiendHudTweaks
 		public static Image SuppressHealDeltaImageObject = null;
 		public static Image SuppressCorruptDeltaImageObject = null;
 
+		public static SkillDef lunarSpecialReplacementSkillDef = null;
+
 		public void OnEnable()
 		{
-			On.RoR2.VoidSurvivorController.OnEnable += VoidSurvivorController_OnEnable;
-			On.RoR2.VoidSurvivorController.OnDisable += VoidSurvivorController_OnDisable;
 			On.RoR2.VoidSurvivorController.UpdateUI += CustomUpdateUI;
 			On.RoR2.VoidSurvivorController.OnOverlayInstanceAdded += VoidSurvivorController_OnOverlayInstanceAdded;
+			On.RoR2.VoidSurvivorController.AddCorruption += VoidSurvivorController_AddCorruption;
 		}
 
 		public void OnDisable()
 		{
-			On.RoR2.VoidSurvivorController.OnEnable -= VoidSurvivorController_OnEnable;
-			On.RoR2.VoidSurvivorController.OnDisable -= VoidSurvivorController_OnDisable;
 			On.RoR2.VoidSurvivorController.UpdateUI -= CustomUpdateUI;
 			On.RoR2.VoidSurvivorController.OnOverlayInstanceAdded -= VoidSurvivorController_OnOverlayInstanceAdded;
+			On.RoR2.VoidSurvivorController.AddCorruption -= VoidSurvivorController_AddCorruption;
 		}
 
 		private void CustomUpdateUI(On.RoR2.VoidSurvivorController.orig_UpdateUI orig, VoidSurvivorController self)
@@ -86,10 +87,10 @@ namespace VoidFiendHudTweaks
 				{
 					if (ConfigSuppressHealDelta.Value)
 					{
-						if (CorruptionPercentage >= 0.25f && CorruptionPercentage < 1f)
+						if (CorruptionPercentage >= 0.25f && CorruptionPercentage < 1f && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef)
 						{
 							SuppressHealDelta = CorruptionPercentage;
-							CorruptionPercentage = Mathf.Clamp(CorruptionPercentage, self.minimumCorruption, CorruptionPercentage - 0.25f);
+							CorruptionPercentage = Mathf.Clamp(CorruptionPercentage, self.minimumCorruption / 100, CorruptionPercentage - 0.25f);
 						}
 						else
 						{
@@ -122,13 +123,13 @@ namespace VoidFiendHudTweaks
 						self.uiCorruptionText.GetComponentInChildren<TextMeshProUGUI>().SetText(stringBuilder);
 						HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
 
-						if (ConfigSuppressCorruptDelta.Value)
+						if (ConfigSuppressCorruptDelta.Value && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef && self.characterBody.skillLocator.special.stock > 0)
 						{
 							CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (25f / (self.maxCorruption - self.minimumCorruption)));
 						}
 						
 					}
-					else if(ConfigSuppressCorruptDelta.Value)
+					else if(ConfigSuppressCorruptDelta.Value && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef && self.characterBody.skillLocator.special.stock > 0)
 					{
 						CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + 0.25f);
 					};
@@ -136,6 +137,18 @@ namespace VoidFiendHudTweaks
 					baseFillUi.SetTValue(CorruptionPercentage);
 					SuppressHealDeltaImageObject.fillAmount = 0f;
 					SuppressCorruptDeltaImageObject.fillAmount = CorruptionDelta;
+				}
+
+				if (CorruptionDeltaElementTimer > 2f)
+				{
+					CorruptionDeltaNumber.SetActive(false);
+					// probably unnecesary
+					CorruptionDeltaElementTimer = 0f;
+				}
+
+				if (ConfigCorruptionDelta.Value && CorruptionDeltaNumber.activeSelf)
+				{
+					CorruptionDeltaElementTimer += Time.fixedDeltaTime;
 				}
 			}
 		}
@@ -159,6 +172,25 @@ namespace VoidFiendHudTweaks
 
 		private void VoidSurvivorController_OnOverlayInstanceAdded(On.RoR2.VoidSurvivorController.orig_OnOverlayInstanceAdded orig, VoidSurvivorController self, OverlayController controller, GameObject instance)
 		{
+
+			CorruptionDeltaNumber = new GameObject("CorruptionDeltaNumber");
+			CorruptionDeltaNumber.transform.SetParent(instance.transform, false);
+			RectTransform rectTransform = CorruptionDeltaNumber.AddComponent<RectTransform>();
+			rectTransform.anchorMin = Vector2.zero;
+			rectTransform.anchorMax = Vector2.one;
+			rectTransform.sizeDelta = Vector2.zero;
+			rectTransform.anchoredPosition = new Vector2(-65f, 60f);
+			TextMeshProUGUI textMeshProUGUI = CorruptionDeltaNumber.AddComponent<TextMeshProUGUI>();
+			textMeshProUGUI.alignment = TextAlignmentOptions.Center;
+			textMeshProUGUI.horizontalAlignment = HorizontalAlignmentOptions.Center;
+			textMeshProUGUI.verticalAlignment = VerticalAlignmentOptions.Middle;
+
+
+			if (!ConfigCorruptionDelta.Value)
+			{
+				CorruptionDeltaNumber.SetActive(false);
+			}
+
 			GameObject FillObject = null;
 
 			// Someone please kill me for this code
@@ -181,6 +213,7 @@ namespace VoidFiendHudTweaks
 					}
 				}
 			}
+
 			if (FillObject != null)
 			{
 				GameObject SuppressHealDeltaObject = Instantiate(FillObject);
@@ -198,18 +231,79 @@ namespace VoidFiendHudTweaks
 				SuppressCorruptDeltaObject.transform.SetSiblingIndex(2);
 			}
 			
-
 			orig(self, controller, instance);
 		}
 
-		private void VoidSurvivorController_OnEnable(On.RoR2.VoidSurvivorController.orig_OnEnable orig, VoidSurvivorController self)
+		private void VoidSurvivorController_AddCorruption(On.RoR2.VoidSurvivorController.orig_AddCorruption orig, VoidSurvivorController self, float amount)
 		{
-			orig(self);
-		}
+			float oldCorruption = self.corruption;
 
-		private void VoidSurvivorController_OnDisable(On.RoR2.VoidSurvivorController.orig_OnDisable orig, VoidSurvivorController self)
-		{
-			orig(self);
+			orig(self, amount);
+
+			// copied from RoR2 code. I hate this code.
+			// Out of combat and in combat numbers are the same, but some mods may use it so...
+			float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
+				(self.characterBody.outOfCombat ?
+					self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
+				: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
+
+			// Don't show the delta if its passive corruption
+			// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
+			// But this probably should have a better check just in case somehow you add 100 or more or smth
+			// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
+			if (!Mathf.Approximately(amount, num * Time.fixedDeltaTime) && Mathf.Abs(amount) != 100f)
+			{
+				if (ConfigCorruptionDelta.Value && !CorruptionDeltaNumber.activeSelf)
+				{
+					CorruptionDeltaNumber.SetActive(true);
+				}
+
+				if (CorruptionDeltaNumber.activeSelf)
+				{
+					TextMeshProUGUI elementText = CorruptionDeltaNumber.GetComponent<TextMeshProUGUI>();
+
+					StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+
+					if (amount > 0)
+					{
+						elementText.color = Color.green;
+						stringBuilder.Append("+");
+					}
+					else
+					{
+						// Don't need to append "-" here because its already part of the float value
+						elementText.color = Color.red;
+					}
+
+					if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
+					{
+						amount = (amount / (self.maxCorruption - self.minimumCorruption)) * 100;
+					}
+					else if (!self.isCorrupted && oldCorruption + amount < self.minimumCorruption)
+					{
+						// Clamp corruption removed by supress to only show the actual delta
+						// ex: corruption 30, minCorruption 20
+						// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
+						amount = -(oldCorruption - self.corruption);
+					}
+
+					// If the delta is less than 1, early out before we actually set the values.
+					// We need this here because we may sometimes modify the delta
+					if (Mathf.Abs(amount) < 1)
+					{
+						CorruptionDeltaNumber.SetActive(false);
+						return;
+					}
+
+					stringBuilder.AppendInt(Mathf.FloorToInt(amount), 1u, 3u).Append("%");
+					elementText.SetText(stringBuilder);
+					HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
+
+					// Reset Timer
+					CorruptionDeltaElementTimer = 0f;
+				}
+			}
+
 		}
 
 		// The Awake() method is run at the very start when the game is initialized.
@@ -217,6 +311,8 @@ namespace VoidFiendHudTweaks
 		{
 			// Init our logging class so that we can properly log for debugging
 			Log.Init(Logger);
+
+			lunarSpecialReplacementSkillDef = Addressables.LoadAssetAsync<SkillDef>("RoR2/Base/LunarSkillReplacements/LunarDetonatorSpecialReplacement.asset").WaitForCompletion();
 
 			ConfigCorruptionPercentageTweak = Config.Bind(
 				"UI Tweaks",
@@ -230,7 +326,7 @@ namespace VoidFiendHudTweaks
 
 			ConfigSuppressHealDelta = Config.Bind(
 				"UI Tweaks",
-				"Show Suppress Heal Delta",
+				"Show Meter Suppress Heal Delta",
 				false,
 				"Show on the corruption meter how much will be removed by Suppress" +
 				"\n\nDefault: False"
@@ -238,7 +334,7 @@ namespace VoidFiendHudTweaks
 
 			ConfigSuppressHealDeltaColor = Config.Bind(
 				"UI Tweaks",
-				"Suppress Heal Delta Color",
+				"Meter Suppress Heal Delta Color",
 				new Color(0.58984375f, 0.265625f, 0.375f, 1f),
 				"The color that will be used if \"Show Suppress Heal Delta\" is enabled" +
 				"\n\nDefault: 964460FF"
@@ -246,7 +342,7 @@ namespace VoidFiendHudTweaks
 
 			ConfigSuppressCorruptDelta = Config.Bind(
 				"UI Tweaks",
-				"Show Suppress Corruption Delta",
+				"Show Meter Suppress Corruption Delta",
 				false,
 				"Show on the corruption meter how much will be added by Corrupted Suppress" +
 				"\n\nDefault: False"
@@ -254,11 +350,22 @@ namespace VoidFiendHudTweaks
 
 			ConfigSuppressCorruptDeltaColor = Config.Bind(
 				"UI Tweaks",
-				"Suppress Corruption Delta Color",
+				"Meter Suppress Corruption Delta Color",
 				new Color(0.6953125f, 0.15234375f, 0.1796875f, 1f),
 				"The color that will be used if \"Show Suppress Corruption Delta\" is enabled" +
 				"\n\nDefault: B2272EFF"
 				);
+
+			ConfigCorruptionDelta = Config.Bind(
+				"UI Tweaks",
+				"Show Corruption Delta Number",
+				false,
+				"Show next to the corruption UI the exact amount added or removed to your corruption percentage" +
+				"\n\nDefault:false"
+				);
+
+			// can't figure this out, come back to it later.
+			//ConfigCorruptionDelta.SettingChanged += (new object(), new SettingChangedEventArgs()) => CorruptionDeltaNumber.SetActive(ConfigCorruptionDelta.Value);
 
 			// Only do this is RiskOfOptions is installed!
 			if (RiskOfOptionsCompatibility.Enabled)
@@ -270,6 +377,8 @@ namespace VoidFiendHudTweaks
 
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigSuppressCorruptDelta);
 				RiskOfOptionsCompatibility.AddColorOption(ConfigSuppressCorruptDeltaColor, delegate () { return !ConfigSuppressCorruptDelta.Value; });
+
+				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigCorruptionDelta);
 
 				RiskOfOptionsCompatibility.InvokeSetModDescription("Tweak various things about the Void Fiend corruption hud to fit your liking");
 			}
