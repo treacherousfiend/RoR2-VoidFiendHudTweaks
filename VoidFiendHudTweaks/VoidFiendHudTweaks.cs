@@ -4,6 +4,7 @@ using RoR2;
 using RoR2.HudOverlay;
 using RoR2.Skills;
 using RoR2.UI;
+using System.Collections.Generic;
 using System.Text;
 using TMPro;
 using UnityEngine;
@@ -29,26 +30,33 @@ namespace VoidFiendHudTweaks
 		public const string PluginAuthor = "fiend";
 		public const string PluginName = "Void-Fiend-UI-Tweak";
 		public const string PluginVersion = "1.0.0";
-		
+
 		public static ConfigEntry<bool> ConfigCorruptionPercentageTweak { get; set; }
-		
+
 		// TODO: Implement these features
 		public static ConfigEntry<bool> ConfigCorruptionTimer { get; set; }
-		
+
 		public static ConfigEntry<bool> ConfigCorruptionDelta { get; set; }
 		public static GameObject CorruptionDeltaNumber = null;
+		public static ConfigEntry<Color> ConfigCorruptionDeltaPositiveColor { get; set; }
+		public static ConfigEntry<Color> ConfigCorruptionDeltaNegativeColor { get; set; }
+
 		public static float CorruptionDeltaElementTimer = 0f;
-		
+
 		public static ConfigEntry<bool> ConfigSuppressHealDelta { get; set; }
 		public static ConfigEntry<Color> ConfigSuppressHealDeltaColor { get; set; }
-		
+
 		public static ConfigEntry<bool> ConfigSuppressCorruptDelta { get; set; }
 		public static ConfigEntry<Color> ConfigSuppressCorruptDeltaColor { get; set; }
 
 		public static Image SuppressHealDeltaImageObject = null;
 		public static Image SuppressCorruptDeltaImageObject = null;
 
-		public static SkillDef lunarSpecialReplacementSkillDef = null;
+		// In case mods or DLC adds alternate special skills for Void Fiend, add the regular and corrupted versions to these dictionaries.
+		// Need to add the SkillDef the value of corruptionChange from the EntityState
+		// The actual meter deltas are calculated using the corruptionChange value of the ability, so its all done for you :)
+		public static Dictionary<SkillDef, float> SpecialSkillDefs = new Dictionary<SkillDef, float>();
+		public static Dictionary<SkillDef, float> CorruptedSpecialSkillDefs = new Dictionary<SkillDef, float>();
 
 		public void OnEnable()
 		{
@@ -83,14 +91,24 @@ namespace VoidFiendHudTweaks
 				float CorruptionPercentage = self.corruption / self.maxCorruption;
 				float SuppressHealDelta = 0f;
 
+				SkillDef CurrentSpecialSkill = self.characterBody.skillLocator.special.skillDef;
+				float CorruptionChange = 0.25f;
+
+				// TODO: rewrite this to make the meter delta use the same values, no reason not to
+				// plus, less code, easier to maintain, some mods might add abilities to add corruption while not corrupted, etc.
 				if (self.isCorrupted == false)
 				{
+					if (SpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
+					{
+						CorruptionChange = Mathf.Abs(SpecialSkillDefs[CurrentSpecialSkill]) / 100;
+					}
+
 					if (ConfigSuppressHealDelta.Value)
 					{
-						if (CorruptionPercentage >= 0.25f && CorruptionPercentage < 1f && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef)
+						if (CorruptionPercentage >= CorruptionChange && CorruptionPercentage < 1f && SpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
 						{
 							SuppressHealDelta = CorruptionPercentage;
-							CorruptionPercentage = Mathf.Clamp(CorruptionPercentage, self.minimumCorruption / 100, CorruptionPercentage - 0.25f);
+							CorruptionPercentage = Mathf.Clamp(CorruptionPercentage, self.minimumCorruption / 100, CorruptionPercentage - CorruptionChange);
 						}
 						else
 						{
@@ -107,6 +125,12 @@ namespace VoidFiendHudTweaks
 				{
 					float CorruptionDelta = 0f;
 
+					if (CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
+					{
+						// don't divide here because we'd just multiply it by 100 again later.
+						CorruptionChange = CorruptedSpecialSkillDefs[CurrentSpecialSkill];
+					}
+
 					if (ConfigCorruptionPercentageTweak.Value)
 					{
 						// In order to get the original 0-100%, we have to convert it by assuming that the current corruption percentage is
@@ -122,16 +146,15 @@ namespace VoidFiendHudTweaks
 						stringBuilder.AppendInt(Mathf.FloorToInt(CorruptionPercentage * 100), 1u, 3u).Append("%");
 						self.uiCorruptionText.GetComponentInChildren<TextMeshProUGUI>().SetText(stringBuilder);
 						HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
-
-						if (ConfigSuppressCorruptDelta.Value && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef && self.characterBody.skillLocator.special.stock > 0)
+						if (ConfigSuppressCorruptDelta.Value && CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill) && self.characterBody.skillLocator.special.stock > 0)
 						{
-							CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (25f / (self.maxCorruption - self.minimumCorruption)));
+							CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (CorruptionChange) / (self.maxCorruption - self.minimumCorruption));
 						}
-						
+
 					}
-					else if(ConfigSuppressCorruptDelta.Value && self.characterBody.skillLocator.special.skillDef != lunarSpecialReplacementSkillDef && self.characterBody.skillLocator.special.stock > 0)
+					else if (ConfigSuppressCorruptDelta.Value && CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill) && self.characterBody.skillLocator.special.stock > 0)
 					{
-						CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + 0.25f);
+						CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (CorruptionChange / 100));
 					};
 
 					baseFillUi.SetTValue(CorruptionPercentage);
@@ -230,7 +253,7 @@ namespace VoidFiendHudTweaks
 				SuppressCorruptDeltaObject.transform.SetParent(FillObject.transform.parent, false);
 				SuppressCorruptDeltaObject.transform.SetSiblingIndex(2);
 			}
-			
+
 			orig(self, controller, instance);
 		}
 
@@ -312,7 +335,18 @@ namespace VoidFiendHudTweaks
 			// Init our logging class so that we can properly log for debugging
 			Log.Init(Logger);
 
-			lunarSpecialReplacementSkillDef = Addressables.LoadAssetAsync<SkillDef>("RoR2/Base/LunarSkillReplacements/LunarDetonatorSpecialReplacement.asset").WaitForCompletion();
+			SpecialSkillDefs.Add(
+				Addressables.LoadAssetAsync<SkillDef>("RoR2/DLC1/VoidSurvivor/CrushCorruption.asset").WaitForCompletion(),
+				float.Parse(Addressables.LoadAssetAsync<EntityStateConfiguration>(
+					   "RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushCorruption.asset"
+					   ).WaitForCompletion().serializedFieldsCollection.GetOrCreateField("corruptionChange").fieldValue.stringValue)
+				);
+			CorruptedSpecialSkillDefs.Add(
+				Addressables.LoadAssetAsync<SkillDef>("RoR2/DLC1/VoidSurvivor/CrushHealth.asset").WaitForCompletion(),
+				float.Parse(Addressables.LoadAssetAsync<EntityStateConfiguration>(
+					   "RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushHealth.asset"
+					   ).WaitForCompletion().serializedFieldsCollection.GetOrCreateField("corruptionChange").fieldValue.stringValue)
+				);
 
 			ConfigCorruptionPercentageTweak = Config.Bind(
 				"UI Tweaks",
@@ -361,8 +395,23 @@ namespace VoidFiendHudTweaks
 				"Show Corruption Delta Number",
 				false,
 				"Show next to the corruption UI the exact amount added or removed to your corruption percentage" +
+				"\nPassive corruption buildup/removal is not shown as part of this delta" +
 				"\n\nDefault:false"
 				);
+			ConfigCorruptionDeltaPositiveColor = Config.Bind(
+				"UI Tweaks",
+				"Corruption Delta Number Positive Color",
+				Color.green,
+				"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
+				"\n\nDefault: 00FF00FF"
+				);
+			ConfigCorruptionDeltaNegativeColor = Config.Bind(
+			"UI Tweaks",
+			"Corruption Delta Number Negative Color",
+			Color.red,
+			"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
+			"\n\nDefault: FF0000FF"
+			);
 
 			// can't figure this out, come back to it later.
 			//ConfigCorruptionDelta.SettingChanged += (new object(), new SettingChangedEventArgs()) => CorruptionDeltaNumber.SetActive(ConfigCorruptionDelta.Value);
@@ -371,14 +420,17 @@ namespace VoidFiendHudTweaks
 			if (RiskOfOptionsCompatibility.Enabled)
 			{
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigCorruptionPercentageTweak);
-				
+
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigSuppressHealDelta);
-				RiskOfOptionsCompatibility.AddColorOption(ConfigSuppressHealDeltaColor, delegate () { return !ConfigSuppressHealDelta.Value; } );
+				RiskOfOptionsCompatibility.AddColorOption(ConfigSuppressHealDeltaColor, delegate () { return !ConfigSuppressHealDelta.Value; });
 
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigSuppressCorruptDelta);
 				RiskOfOptionsCompatibility.AddColorOption(ConfigSuppressCorruptDeltaColor, delegate () { return !ConfigSuppressCorruptDelta.Value; });
 
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigCorruptionDelta);
+				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaPositiveColor, delegate () { return !ConfigCorruptionDelta.Value; });
+				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaNegativeColor, delegate () { return !ConfigCorruptionDelta.Value; });
+
 
 				RiskOfOptionsCompatibility.InvokeSetModDescription("Tweak various things about the Void Fiend corruption hud to fit your liking");
 			}
