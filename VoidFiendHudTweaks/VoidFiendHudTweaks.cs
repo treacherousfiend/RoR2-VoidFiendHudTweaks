@@ -27,7 +27,7 @@ namespace VoidFiendHudTweaks
 	public class VoidFiendHudTweaks : BaseUnityPlugin
 	{
 		public const string PluginGUID = PluginAuthor + "." + PluginName;
-		public const string PluginAuthor = "fiend";
+		public const string PluginAuthor = "treacherousfiend";
 		public const string PluginName = "Void-Fiend-UI-Tweak";
 		public const string PluginVersion = "1.0.0";
 
@@ -49,14 +49,17 @@ namespace VoidFiendHudTweaks
 		public static ConfigEntry<bool> ConfigSuppressCorruptDelta { get; set; }
 		public static ConfigEntry<Color> ConfigSuppressCorruptDeltaColor { get; set; }
 
-		public static Image SuppressHealDeltaImageObject = null;
+		public static Image SuppressDeltaImageObject = null;
 		public static Image SuppressCorruptDeltaImageObject = null;
 
 		// In case mods or DLC adds alternate special skills for Void Fiend, add the regular and corrupted versions to these dictionaries.
-		// Need to add the SkillDef the value of corruptionChange from the EntityState
+		// Need to add the SkillDef and a dictionary of all of the serializedfields from the entity state.
+		// This mod has a helper function called "GetSerializedValues" which will generate this dictionary.
 		// The actual meter deltas are calculated using the corruptionChange value of the ability, so its all done for you :)
-		public static Dictionary<SkillDef, float> SpecialSkillDefs = new Dictionary<SkillDef, float>();
-		public static Dictionary<SkillDef, float> CorruptedSpecialSkillDefs = new Dictionary<SkillDef, float>();
+		public static Dictionary<SkillDef, Dictionary<string, string>> SpecialSkillDefs = new Dictionary<SkillDef, Dictionary<string, string>>();
+		public static Dictionary<SkillDef, Dictionary<string, string>> CorruptedSpecialSkillDefs = new Dictionary<SkillDef, Dictionary<string, string>>();
+
+		public static ConfigEntry<bool> ConfigShowPermaCorruptionMin { get; set; }
 
 		public void OnEnable()
 		{
@@ -70,6 +73,80 @@ namespace VoidFiendHudTweaks
 			On.RoR2.VoidSurvivorController.UpdateUI -= CustomUpdateUI;
 			On.RoR2.VoidSurvivorController.OnOverlayInstanceAdded -= VoidSurvivorController_OnOverlayInstanceAdded;
 			On.RoR2.VoidSurvivorController.AddCorruption -= VoidSurvivorController_AddCorruption;
+		}
+
+		private float GenerateMeterDelta(Dictionary<SkillDef, Dictionary<string, string>> skillDefDict, SkillDef currSpecialSkill, VoidSurvivorController survivorController, ImageFillController baseFillUi)
+		{
+			float CorruptionFraction = survivorController.corruption / survivorController.maxCorruption;
+			float TextCorruptionPercentage = CorruptionFraction * 100f;
+			float CorruptionDelta = 0f;
+
+			float CorruptionChange = float.Parse(skillDefDict[currSpecialSkill]["corruptionChange"]) / 100f;
+
+			// Only show the delta meter if we have more than 0 stock (if the ability doesn't recharge), or if the ability recharges
+			// TODO: only hide once the ability actually changes the value.
+			if (survivorController.characterBody.skillLocator.special.stock > 0 || currSpecialSkill.rechargeStock > 0)
+			{
+				if (CorruptionChange < 0f && ConfigSuppressHealDelta.Value)
+				{
+					// separate if statement because i'm bad at coding.
+					if (CorruptionFraction >= CorruptionChange && CorruptionFraction < 1f)
+					{
+						SuppressDeltaImageObject.color = ConfigSuppressHealDeltaColor.Value;
+						CorruptionDelta = CorruptionFraction;
+						// Only show delta if we're above the minimum needed to use the ability.
+						// TODO: the minimumCorruption needed for an ability is different than how much is changed
+						// some mods might use this, so it should be supported!
+						if (CorruptionFraction >= Mathf.Abs(CorruptionChange))
+						{
+							CorruptionFraction = Mathf.Max(survivorController.minimumCorruption / 100, CorruptionFraction + CorruptionChange);
+						}
+					}
+				}
+				else
+				{
+					if (ConfigCorruptionPercentageTweak.Value)
+					{
+						float adjustedMaxCorruption = survivorController.maxCorruption - survivorController.minimumCorruption;
+
+						// In order to get the original 0-100%, we have to convert it by assuming that the current corruption percentage is
+						// (corruption - minCorruption) / (maxCorruption - minCorruption)
+						// While technically, the game always uses 0-100%, if for example, minCorruption was 30%, then its technically a 0-70% scale.
+						// So from there we can get the percentage along that 0-70% scale and that is our 0-100% scale percentage.
+						// Example:
+						// corruption = 90, minCorruption = 30, maxCorruption = 100
+						// (corruption - minCorruption) [60] / (maxCorruption - minCorruption) [70] = 0.8571428571
+						CorruptionFraction = (survivorController.corruption - survivorController.minimumCorruption) / adjustedMaxCorruption;
+						TextCorruptionPercentage = CorruptionFraction * 100f;
+
+						if (ConfigSuppressCorruptDelta.Value)
+						{
+							SuppressDeltaImageObject.color = ConfigSuppressCorruptDeltaColor.Value;
+							CorruptionDelta = Mathf.Min(1f, CorruptionFraction + ((CorruptionChange * 100f) / adjustedMaxCorruption));
+						}
+					}
+					else if (ConfigSuppressCorruptDelta.Value)
+					{
+						SuppressDeltaImageObject.color = ConfigSuppressCorruptDeltaColor.Value;
+						CorruptionDelta = Mathf.Min(1f, CorruptionFraction + CorruptionChange);
+					};
+				}
+			}
+			else
+			{
+				// Needed since we just completely skip the code normally once the player is out of their special ability charges
+				// there HAS to be a better way than this, but i'm not sure how.
+				if (ConfigCorruptionPercentageTweak.Value)
+				{
+					float adjustedMaxCorruption = survivorController.maxCorruption - survivorController.minimumCorruption;
+
+					CorruptionFraction = (survivorController.corruption - survivorController.minimumCorruption) / adjustedMaxCorruption;
+					TextCorruptionPercentage = CorruptionFraction * 100f;
+				}
+			}
+			baseFillUi.SetTValue(CorruptionFraction);
+			SuppressDeltaImageObject.fillAmount = CorruptionDelta;
+			return TextCorruptionPercentage;
 		}
 
 		private void CustomUpdateUI(On.RoR2.VoidSurvivorController.orig_UpdateUI orig, VoidSurvivorController self)
@@ -88,79 +165,35 @@ namespace VoidFiendHudTweaks
 			// Workaround because UpdateUI is run once before OnOverlayInstanceAdded
 			if (self.fillUiList.Count > 0)
 			{
-				float CorruptionPercentage = self.corruption / self.maxCorruption;
-				float SuppressHealDelta = 0f;
-
 				SkillDef CurrentSpecialSkill = self.characterBody.skillLocator.special.skillDef;
-				float CorruptionChange = 0.25f;
+				float CorruptionPercentage = self.corruption; // in case we don't change this value, just use the default
 
-				// TODO: rewrite this to make the meter delta use the same values, no reason not to
-				// plus, less code, easier to maintain, some mods might add abilities to add corruption while not corrupted, etc.
-				if (self.isCorrupted == false)
+				if (!self.isPermanentlyCorrupted)
 				{
-					if (SpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
+					if (!self.isCorrupted && SpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
 					{
-						CorruptionChange = Mathf.Abs(SpecialSkillDefs[CurrentSpecialSkill]) / 100;
+						CorruptionPercentage = GenerateMeterDelta(SpecialSkillDefs, CurrentSpecialSkill, self, baseFillUi);
 					}
-
-					if (ConfigSuppressHealDelta.Value)
+					else if (CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
 					{
-						if (CorruptionPercentage >= CorruptionChange && CorruptionPercentage < 1f && SpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
-						{
-							SuppressHealDelta = CorruptionPercentage;
-							CorruptionPercentage = Mathf.Clamp(CorruptionPercentage, self.minimumCorruption / 100, CorruptionPercentage - CorruptionChange);
-						}
-						else
-						{
-							SuppressHealDeltaImageObject.fillAmount = 0f;
-						}
+						CorruptionPercentage = GenerateMeterDelta(CorruptedSpecialSkillDefs, CurrentSpecialSkill, self, baseFillUi);
 					}
-
-					baseFillUi.SetTValue(CorruptionPercentage);
-					SuppressHealDeltaImageObject.fillAmount = SuppressHealDelta;
-					SuppressCorruptDeltaImageObject.fillAmount = 0f;
-
+				}
+				else if (!ConfigShowPermaCorruptionMin.Value)
+				{
+					CorruptionPercentage = self.minimumCorruption;
 				}
 				else
 				{
-					float CorruptionDelta = 0f;
-
-					if (CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill))
-					{
-						// don't divide here because we'd just multiply it by 100 again later.
-						CorruptionChange = CorruptedSpecialSkillDefs[CurrentSpecialSkill];
-					}
-
-					if (ConfigCorruptionPercentageTweak.Value)
-					{
-						// In order to get the original 0-100%, we have to convert it by assuming that the current corruption percentage is
-						// (corruption - minCorruption) / (maxCorruption - minCorruption)
-						// While technically, the game always uses 0-100%, if for example, minCorruption was 30%, then its technically a 0-70% scale.
-						// So from there we can get the percentage along that 0-70% scale and that is our 0-100% scale percentage.
-						// Example:
-						// corruption = 90, minCorruption = 30, maxCorruption = 100
-						// (corruption - minCorruption) [60] / (maxCorruption - minCorruption) [70] = 0.8571428571
-						CorruptionPercentage = (self.corruption - self.minimumCorruption) / (self.maxCorruption - self.minimumCorruption);
-
-						StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
-						stringBuilder.AppendInt(Mathf.FloorToInt(CorruptionPercentage * 100), 1u, 3u).Append("%");
-						self.uiCorruptionText.GetComponentInChildren<TextMeshProUGUI>().SetText(stringBuilder);
-						HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
-						if (ConfigSuppressCorruptDelta.Value && CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill) && self.characterBody.skillLocator.special.stock > 0)
-						{
-							CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (CorruptionChange) / (self.maxCorruption - self.minimumCorruption));
-						}
-
-					}
-					else if (ConfigSuppressCorruptDelta.Value && CorruptedSpecialSkillDefs.ContainsKey(CurrentSpecialSkill) && self.characterBody.skillLocator.special.stock > 0)
-					{
-						CorruptionDelta = Mathf.Min(1f, CorruptionPercentage + (CorruptionChange / 100));
-					};
-
-					baseFillUi.SetTValue(CorruptionPercentage);
-					SuppressHealDeltaImageObject.fillAmount = 0f;
-					SuppressCorruptDeltaImageObject.fillAmount = CorruptionDelta;
+					// Clamp CorruptionPercentage to 100% to fix a vanilla bug which caused the percentage to flicker when minCorruption was over 100%
+					CorruptionPercentage = 100f;
 				}
+
+				// Create the visible percentage string
+				StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+				stringBuilder.AppendInt(Mathf.FloorToInt(CorruptionPercentage), 1u, 3u).Append("%");
+				self.uiCorruptionText.GetComponentInChildren<TextMeshProUGUI>().SetText(stringBuilder);
+				HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
 
 				if (CorruptionDeltaElementTimer > 2f)
 				{
@@ -195,7 +228,6 @@ namespace VoidFiendHudTweaks
 
 		private void VoidSurvivorController_OnOverlayInstanceAdded(On.RoR2.VoidSurvivorController.orig_OnOverlayInstanceAdded orig, VoidSurvivorController self, OverlayController controller, GameObject instance)
 		{
-
 			CorruptionDeltaNumber = new GameObject("CorruptionDeltaNumber");
 			CorruptionDeltaNumber.transform.SetParent(instance.transform, false);
 			RectTransform rectTransform = CorruptionDeltaNumber.AddComponent<RectTransform>();
@@ -207,7 +239,6 @@ namespace VoidFiendHudTweaks
 			textMeshProUGUI.alignment = TextAlignmentOptions.Center;
 			textMeshProUGUI.horizontalAlignment = HorizontalAlignmentOptions.Center;
 			textMeshProUGUI.verticalAlignment = VerticalAlignmentOptions.Middle;
-
 
 			if (!ConfigCorruptionDelta.Value)
 			{
@@ -239,19 +270,12 @@ namespace VoidFiendHudTweaks
 
 			if (FillObject != null)
 			{
-				GameObject SuppressHealDeltaObject = Instantiate(FillObject);
-				SuppressHealDeltaObject.name = "FillSuppressHealDelta";
-				SuppressHealDeltaImageObject = SuppressHealDeltaObject.GetComponent<UnityEngine.UI.Image>();
-				SuppressHealDeltaImageObject.color = ConfigSuppressHealDeltaColor.Value;
-				SuppressHealDeltaObject.transform.SetParent(FillObject.transform.parent, false);
-				SuppressHealDeltaObject.transform.SetSiblingIndex(1);
-
-				GameObject SuppressCorruptDeltaObject = Instantiate(FillObject);
-				SuppressCorruptDeltaObject.name = "FillSuppressCorruptDelta";
-				SuppressCorruptDeltaImageObject = SuppressCorruptDeltaObject.GetComponent<UnityEngine.UI.Image>();
-				SuppressCorruptDeltaImageObject.color = ConfigSuppressCorruptDeltaColor.Value;
-				SuppressCorruptDeltaObject.transform.SetParent(FillObject.transform.parent, false);
-				SuppressCorruptDeltaObject.transform.SetSiblingIndex(2);
+				GameObject SuppressDeltaObject = Instantiate(FillObject);
+				SuppressDeltaObject.name = "FillSuppressHealDelta";
+				SuppressDeltaImageObject = SuppressDeltaObject.GetComponent<UnityEngine.UI.Image>();
+				SuppressDeltaImageObject.color = ConfigSuppressHealDeltaColor.Value;
+				SuppressDeltaObject.transform.SetParent(FillObject.transform.parent, false);
+				SuppressDeltaObject.transform.SetSiblingIndex(1);
 			}
 
 			orig(self, controller, instance);
@@ -262,71 +286,73 @@ namespace VoidFiendHudTweaks
 			float oldCorruption = self.corruption;
 
 			orig(self, amount);
-
-			// copied from RoR2 code. I hate this code.
-			// Out of combat and in combat numbers are the same, but some mods may use it so...
-			float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
-				(self.characterBody.outOfCombat ?
-					self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
-				: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
-
-			// Don't show the delta if its passive corruption
-			// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
-			// But this probably should have a better check just in case somehow you add 100 or more or smth
-			// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
-			if (!Mathf.Approximately(amount, num * Time.fixedDeltaTime) && Mathf.Abs(amount) != 100f)
+			// Just skip everything if we're perma corrupted
+			if (!self.isPermanentlyCorrupted)
 			{
-				if (ConfigCorruptionDelta.Value && !CorruptionDeltaNumber.activeSelf)
+				// copied from RoR2 code. I hate this code.
+				// Out of combat and in combat numbers are the same, but some mods may use it so...
+				float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
+					(self.characterBody.outOfCombat ?
+						self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
+					: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
+
+				// Don't show the delta if its passive corruption
+				// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
+				// But this probably should have a better check just in case somehow you add 100 or more or smth
+				// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
+				if (!Mathf.Approximately(amount, num * Time.fixedDeltaTime) && Mathf.Abs(amount) != 100f)
 				{
-					CorruptionDeltaNumber.SetActive(true);
-				}
-
-				if (CorruptionDeltaNumber.activeSelf)
-				{
-					TextMeshProUGUI elementText = CorruptionDeltaNumber.GetComponent<TextMeshProUGUI>();
-
-					StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
-
-					if (amount > 0)
+					if (ConfigCorruptionDelta.Value && !CorruptionDeltaNumber.activeSelf)
 					{
-						elementText.color = Color.green;
-						stringBuilder.Append("+");
-					}
-					else
-					{
-						// Don't need to append "-" here because its already part of the float value
-						elementText.color = Color.red;
+						CorruptionDeltaNumber.SetActive(true);
 					}
 
-					if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
+					if (CorruptionDeltaNumber.activeSelf)
 					{
-						amount = (amount / (self.maxCorruption - self.minimumCorruption)) * 100;
-					}
-					else if (!self.isCorrupted && oldCorruption + amount < self.minimumCorruption)
-					{
-						// Clamp corruption removed by supress to only show the actual delta
-						// ex: corruption 30, minCorruption 20
-						// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
-						amount = -(oldCorruption - self.corruption);
-					}
+						TextMeshProUGUI elementText = CorruptionDeltaNumber.GetComponent<TextMeshProUGUI>();
 
-					// If the delta is less than 1, early out before we actually set the values.
-					// We need this here because we may sometimes modify the delta
-					if (Mathf.Abs(amount) < 1)
-					{
-						CorruptionDeltaNumber.SetActive(false);
-						return;
+						StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+
+						if (amount > 0)
+						{
+							elementText.color = Color.green;
+							stringBuilder.Append("+");
+						}
+						else
+						{
+							// Don't need to append "-" here because its already part of the float value
+							elementText.color = Color.red;
+						}
+
+						if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
+						{
+							amount = (amount / (self.maxCorruption - self.minimumCorruption)) * 100;
+						}
+						else if (!self.isCorrupted && oldCorruption + amount < self.minimumCorruption)
+						{
+							// Clamp corruption removed by supress to only show the actual delta
+							// ex: corruption 30, minCorruption 20
+							// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
+							amount = -(oldCorruption - self.corruption);
+						}
+
+						// If the delta is less than 1, early out before we actually set the values.
+						// We need this here because we may sometimes modify the delta
+						if (Mathf.Abs(amount) < 1)
+						{
+							CorruptionDeltaNumber.SetActive(false);
+							return;
+						}
+
+						stringBuilder.AppendInt(Mathf.FloorToInt(amount), 1u, 3u).Append("%");
+						elementText.SetText(stringBuilder);
+						HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
+
+						// Reset Timer
+						CorruptionDeltaElementTimer = 0f;
 					}
-
-					stringBuilder.AppendInt(Mathf.FloorToInt(amount), 1u, 3u).Append("%");
-					elementText.SetText(stringBuilder);
-					HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
-
-					// Reset Timer
-					CorruptionDeltaElementTimer = 0f;
 				}
 			}
-
 		}
 
 		// The Awake() method is run at the very start when the game is initialized.
@@ -337,15 +363,11 @@ namespace VoidFiendHudTweaks
 
 			SpecialSkillDefs.Add(
 				Addressables.LoadAssetAsync<SkillDef>("RoR2/DLC1/VoidSurvivor/CrushCorruption.asset").WaitForCompletion(),
-				float.Parse(Addressables.LoadAssetAsync<EntityStateConfiguration>(
-					   "RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushCorruption.asset"
-					   ).WaitForCompletion().serializedFieldsCollection.GetOrCreateField("corruptionChange").fieldValue.stringValue)
+				GetSerializedValues(Addressables.LoadAssetAsync<EntityStateConfiguration>("RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushCorruption.asset").WaitForCompletion().serializedFieldsCollection.serializedFields)
 				);
 			CorruptedSpecialSkillDefs.Add(
 				Addressables.LoadAssetAsync<SkillDef>("RoR2/DLC1/VoidSurvivor/CrushHealth.asset").WaitForCompletion(),
-				float.Parse(Addressables.LoadAssetAsync<EntityStateConfiguration>(
-					   "RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushHealth.asset"
-					   ).WaitForCompletion().serializedFieldsCollection.GetOrCreateField("corruptionChange").fieldValue.stringValue)
+				GetSerializedValues(Addressables.LoadAssetAsync<EntityStateConfiguration>("RoR2/DLC1/VoidSurvivor/EntityStates.VoidSurvivor.Weapon.CrushHealth.asset").WaitForCompletion().serializedFieldsCollection.serializedFields)
 				);
 
 			ConfigCorruptionPercentageTweak = Config.Bind(
@@ -396,7 +418,8 @@ namespace VoidFiendHudTweaks
 				false,
 				"Show next to the corruption UI the exact amount added or removed to your corruption percentage" +
 				"\nPassive corruption buildup/removal is not shown as part of this delta" +
-				"\n\nDefault:false"
+				"\nDelta is also hidden if you are permanently corrupted" +
+				"\n\nDefault: False"
 				);
 			ConfigCorruptionDeltaPositiveColor = Config.Bind(
 				"UI Tweaks",
@@ -408,10 +431,19 @@ namespace VoidFiendHudTweaks
 			ConfigCorruptionDeltaNegativeColor = Config.Bind(
 			"UI Tweaks",
 			"Corruption Delta Number Negative Color",
-			Color.red,
-			"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
-			"\n\nDefault: FF0000FF"
-			);
+				Color.red,
+				"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
+				"\n\nDefault: FF0000FF"
+				);
+
+			ConfigShowPermaCorruptionMin = Config.Bind(
+				"UI Tweaks",
+				"Clamp Corruption Percentage to 100%",
+				true,
+				"When disabled, show the minimum corruption when permanently corrupted rather than capping it to 100%" +
+				"\nJust for fun." +
+				"\n\nDefault: True"
+				);
 
 			// can't figure this out, come back to it later.
 			//ConfigCorruptionDelta.SettingChanged += (new object(), new SettingChangedEventArgs()) => CorruptionDeltaNumber.SetActive(ConfigCorruptionDelta.Value);
@@ -431,9 +463,24 @@ namespace VoidFiendHudTweaks
 				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaPositiveColor, delegate () { return !ConfigCorruptionDelta.Value; });
 				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaNegativeColor, delegate () { return !ConfigCorruptionDelta.Value; });
 
+				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigShowPermaCorruptionMin);
+
 
 				RiskOfOptionsCompatibility.InvokeSetModDescription("Tweak various things about the Void Fiend corruption hud to fit your liking");
 			}
+		}
+
+		// Due to dictionary being limited to single types, all values are stored as strings, you will have to parse them yourself.
+		public Dictionary<string, string> GetSerializedValues(HG.GeneralSerializer.SerializedField[] serializedFields)
+		{
+			Dictionary<string, string> KVDict = new Dictionary<string, string>();
+
+			foreach (var serializedField in serializedFields)
+			{
+				KVDict.Add(serializedField.fieldName, serializedField.fieldValue.stringValue);
+			}
+
+			return new Dictionary<string, string>(KVDict);
 		}
 	}
 }
