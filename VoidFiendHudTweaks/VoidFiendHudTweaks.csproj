@@ -78,7 +78,7 @@
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy /Y &quot;$(TargetDir)$(ProjectName).dll&quot; &quot;C:\Users\fiend\AppData\Roaming\r2modmanPlus-local\RiskOfRain2\profiles\moddev\BepInEx\plugins\Unknown-ExamplePlugin\$(ProjectName).dll&quot;&#xD;&#xA;copy /Y &quot;$(TargetDir)$(ProjectName).pdb&quot; &quot;C:\Users\fiend\AppData\Roaming\r2modmanPlus-local\RiskOfRain2\profiles\moddev\BepInEx\plugins\Unknown-ExamplePlugin\$(ProjectName).pdb&quot;&#xD;&#xA;" />
+    <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;$(ProjectDir)..\Thunderstore\plugins\VoidFiendHudTweaks\$(TargetName).dll&quot;" />
   </Target>
 
 </Project>
