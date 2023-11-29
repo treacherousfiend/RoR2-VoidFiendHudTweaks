@@ -42,36 +42,11 @@ namespace VoidFiendHudTweaks
 		public static ConfigEntry<Color> ConfigCorruptionDeltaPositiveColor { get; set; }
 		public static ConfigEntry<Color> ConfigCorruptionDeltaNegativeColor { get; set; }
 
-		public class CorruptionDeltaNotice : IComparable<CorruptionDeltaNotice>
+		public class CorruptionDeltaNotice
 		{
 			public float ElementTimer = 0f;
 			public string DeltaValue = string.Empty;
 			public bool PositiveDelta = false;
-
-			// We want the youngest notices to be at the start of the list, so we use our own Comparer to do so.
-			public int CompareTo(CorruptionDeltaNotice otherNotice)
-			{
-				if (this == null)
-				{
-					return 1;
-				}
-				else if (otherNotice == null)
-				{
-					return -1;
-				}
-				else if (this.ElementTimer > otherNotice.ElementTimer)
-				{
-					return -1;
-				}
-				else if (this.ElementTimer < otherNotice.ElementTimer)
-				{
-					return 1;
-				}
-				else
-				{
-					return 0;
-				}
-			}
 		}
 
 		public static List<CorruptionDeltaNotice> CorruptionDeltaNoticeList = new List<CorruptionDeltaNotice>();
