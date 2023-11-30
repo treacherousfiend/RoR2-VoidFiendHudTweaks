@@ -1,10 +1,11 @@
 using BepInEx;
 using BepInEx.Configuration;
+using R2API;
+using R2API.Utils;
 using RoR2;
 using RoR2.HudOverlay;
 using RoR2.Skills;
 using RoR2.UI;
-using System;
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
@@ -16,6 +17,11 @@ namespace VoidFiendHudTweaks
 {
 	// Add Risk of Options dependency
 	[BepInDependency("com.rune580.riskofoptions", BepInDependency.DependencyFlags.SoftDependency)]
+
+	[BepInDependency(R2API.R2API.PluginGUID)]
+	[NetworkCompatibility(CompatibilityLevel.NoNeedForSync)]
+
+	[BepInDependency(LanguageAPI.PluginGUID)]
 
 	// This attribute is required, and lists metadata for your plugin.
 	[BepInPlugin(PluginGUID, PluginName, PluginVersion)]
