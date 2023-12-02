@@ -1,9 +1,15 @@
-# R2Boilerplate
+# Void Fiend Hud Tweaks
 
-This repository contains a sample mod for Risk of Rain 2.
+A collection of customizable tweaks for Void Fiend's corruption hud to hopefully make the convoluted mechanic a bit easier to understand for some people (aka me)
 
-You can clone this repository, open the visual studio solution file and compile it immediately.
+If you're only here for mod downloads, you'll find more info on the Thunderstore page.
 
-This repository is meant to represent best practices for starting a simple mod.
+## To-Do
 
-Once your mod get compiled, you can utilize the Thunderstore folder for later uploading it to https://thunderstore.io/c/riskofrain2/
+- Localization Support
+- Setup setting change hooks so that code is completely skipped instead of checking if an option is enabled every frame
+- Make the code a bit more modular so that hud elements can potentially be generated on the fly
+
+## Licensing
+
+This repository is dedicated to the public domain under CC0

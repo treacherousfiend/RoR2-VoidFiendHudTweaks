@@ -28,7 +28,7 @@ namespace VoidFiendHudTweaks
 			RiskOfOptions.ModSettingsManager.AddOption(new RiskOfOptions.Options.CheckBoxOption(newEntry, restartRequired));
 		}
 
-		public static void AddCheckBoxOption(ConfigEntry<bool> newEntry, string inputName = null, string inputDescription = null, string inputCategory = null, bool inputRestartRequired = false, Delegate inputCheckIfDisabled = null )
+		public static void AddCheckBoxOption(ConfigEntry<bool> newEntry, string inputName = null, string inputDescription = null, string inputCategory = null, bool inputRestartRequired = false, Delegate inputCheckIfDisabled = null)
 		{
 			var OptionConfig = new RiskOfOptions.OptionConfigs.CheckBoxConfig()
 			{

@@ -1,6 +1,6 @@
 using BepInEx;
 using BepInEx.Configuration;
-using R2API;
+using HarmonyLib;
 using R2API.Utils;
 using RoR2;
 using RoR2.HudOverlay;
@@ -21,7 +21,7 @@ namespace VoidFiendHudTweaks
 	[BepInDependency(R2API.R2API.PluginGUID)]
 	[NetworkCompatibility(CompatibilityLevel.NoNeedForSync)]
 
-	[BepInDependency(LanguageAPI.PluginGUID)]
+	//[BepInDependency(LanguageAPI.PluginGUID)]
 
 	// This attribute is required, and lists metadata for your plugin.
 	[BepInPlugin(PluginGUID, PluginName, PluginVersion)]
@@ -44,7 +44,6 @@ namespace VoidFiendHudTweaks
 		public static ConfigEntry<bool> ConfigCorruptionTimer { get; set; }
 
 		public static ConfigEntry<bool> ConfigCorruptionDelta { get; set; }
-		public static GameObject CorruptionDeltaNumber = null;
 		public static ConfigEntry<Color> ConfigCorruptionDeltaPositiveColor { get; set; }
 		public static ConfigEntry<Color> ConfigCorruptionDeltaNegativeColor { get; set; }
 
@@ -55,8 +54,8 @@ namespace VoidFiendHudTweaks
 			public bool PositiveDelta = false;
 		}
 
-		public static List<CorruptionDeltaNotice> CorruptionDeltaNoticeList = new List<CorruptionDeltaNotice>();
-		public static List<GameObject> CorruptionDeltaNoticeObjects = new List<GameObject>(3);
+		public static List<CorruptionDeltaNotice> CorruptionDeltaNoticeList = [];
+		public static List<GameObject> CorruptionDeltaNoticeObjects = new(3);
 
 		public static ConfigEntry<bool> ConfigSuppressHealDelta { get; set; }
 		public static ConfigEntry<Color> ConfigSuppressHealDeltaColor { get; set; }
@@ -71,8 +70,8 @@ namespace VoidFiendHudTweaks
 		// Need to add the SkillDef and a dictionary of all of the serializedfields from the entity state.
 		// This mod has a helper function called "GetSerializedValues" which will generate this dictionary.
 		// The actual meter deltas are calculated using the corruptionChange value of the ability, so its all done for you :)
-		public static Dictionary<SkillDef, Dictionary<string, string>> SpecialSkillDefs = new Dictionary<SkillDef, Dictionary<string, string>>();
-		public static Dictionary<SkillDef, Dictionary<string, string>> CorruptedSpecialSkillDefs = new Dictionary<SkillDef, Dictionary<string, string>>();
+		public static Dictionary<SkillDef, Dictionary<string, string>> SpecialSkillDefs = [];
+		public static Dictionary<SkillDef, Dictionary<string, string>> CorruptedSpecialSkillDefs = [];
 
 		public static ConfigEntry<bool> ConfigShowPermaCorruptionMin { get; set; }
 
@@ -84,51 +83,57 @@ namespace VoidFiendHudTweaks
 		{
 			On.RoR2.VoidSurvivorController.UpdateUI += CustomUpdateUI;
 			On.RoR2.VoidSurvivorController.OnOverlayInstanceAdded += VoidSurvivorController_OnOverlayInstanceAdded;
-			On.RoR2.VoidSurvivorController.AddCorruption += VoidSurvivorController_AddCorruption;
+			On.RoR2.VoidSurvivorController.OnCorruptionModified += VoidSurvivorController_OnCorruptionModified;
 		}
 
 		public void OnDisable()
 		{
 			On.RoR2.VoidSurvivorController.UpdateUI -= CustomUpdateUI;
 			On.RoR2.VoidSurvivorController.OnOverlayInstanceAdded -= VoidSurvivorController_OnOverlayInstanceAdded;
-			On.RoR2.VoidSurvivorController.AddCorruption -= VoidSurvivorController_AddCorruption;
+			On.RoR2.VoidSurvivorController.OnCorruptionModified -= VoidSurvivorController_OnCorruptionModified;
 		}
 
 		private void UpdateCorruptionTimer(VoidSurvivorController survivorController)
 		{
 			float secondsToCorruption;
-			if (survivorController.isCorrupted)
+			if (!survivorController.isPermanentlyCorrupted)
 			{
-				if (!ConfigShowCorruptionTimerWhenCorrupted.Value)
+				if (survivorController.isCorrupted)
 				{
-					CorruptionTimerObject.SetActive(false);
-					return;
-				}
+					if (!ConfigShowCorruptionTimerWhenCorrupted.Value)
+					{
+						CorruptionTimerObject.SetActive(false);
+						return;
+					}
 
-				CorruptionTimerObject.SetActive(true);
-				secondsToCorruption = (survivorController.corruption - survivorController.minimumCorruption) / Mathf.Abs(survivorController.corruptionFractionPerSecondWhileCorrupted * 100f);
-			}
-			else
-			{
-				if (!ConfigShowCorruptionTimerWhenUncorrupted.Value)
-				{
-					CorruptionTimerObject.SetActive(false);
-					return;
-				}
-
-				if (survivorController.characterBody.outOfCombat)
-				{
-					secondsToCorruption = (survivorController.maxCorruption - survivorController.corruption) / survivorController.corruptionPerSecondOutOfCombat;
+					CorruptionTimerObject.SetActive(true);
+					secondsToCorruption = (survivorController.corruption - survivorController.minimumCorruption) / Mathf.Abs(survivorController.corruptionFractionPerSecondWhileCorrupted * 100f);
 				}
 				else
 				{
-					secondsToCorruption = (survivorController.maxCorruption - survivorController.corruption) / survivorController.corruptionPerSecondInCombat;
+					if (!ConfigShowCorruptionTimerWhenUncorrupted.Value)
+					{
+						CorruptionTimerObject.SetActive(false);
+						return;
+					}
+
+					if (survivorController.characterBody.outOfCombat)
+					{
+						secondsToCorruption = (survivorController.maxCorruption - survivorController.corruption) / survivorController.corruptionPerSecondOutOfCombat;
+					}
+					else
+					{
+						secondsToCorruption = (survivorController.maxCorruption - survivorController.corruption) / survivorController.corruptionPerSecondInCombat;
+					}
+					CorruptionTimerObject.SetActive(true);
 				}
-				CorruptionTimerObject.SetActive(true);
+
+				CorruptionTimerObject.GetComponent<TimerText>().seconds = secondsToCorruption;
 			}
-
-			CorruptionTimerObject.GetComponent<TimerText>().seconds = secondsToCorruption;
-
+			else
+			{
+				CorruptionTimerObject.SetActive(false);
+			}
 		}
 
 		private void UpdateCorruptionDeltaNotices()
@@ -173,7 +178,7 @@ namespace VoidFiendHudTweaks
 				}
 				else
 				{
-					if (ConfigCorruptionPercentageTweak.Value)
+					if (ConfigCorruptionPercentageTweak.Value && survivorController.isCorrupted)
 					{
 						float adjustedMaxCorruption = survivorController.maxCorruption - survivorController.minimumCorruption;
 
@@ -204,7 +209,7 @@ namespace VoidFiendHudTweaks
 			{
 				// Needed since we just completely skip the code normally once the player is out of their special ability charges
 				// there HAS to be a better way than this, but i'm not sure how.
-				if (ConfigCorruptionPercentageTweak.Value)
+				if (ConfigCorruptionPercentageTweak.Value && survivorController.isCorrupted)
 				{
 					float adjustedMaxCorruption = survivorController.maxCorruption - survivorController.minimumCorruption;
 
@@ -212,6 +217,7 @@ namespace VoidFiendHudTweaks
 					TextCorruptionPercentage = CorruptionFraction * 100f;
 				}
 			}
+
 			baseFillUi.SetTValue(CorruptionFraction);
 			SuppressDeltaImageObject.fillAmount = CorruptionDelta;
 			return TextCorruptionPercentage;
@@ -309,53 +315,32 @@ namespace VoidFiendHudTweaks
 			}
 		}
 
-		private void VoidSurvivorController_OnOverlayInstanceAdded(On.RoR2.VoidSurvivorController.orig_OnOverlayInstanceAdded orig, VoidSurvivorController self, OverlayController controller, GameObject instance)
+		private GameObject GenerateCorruptionDeltaHudElement(string name, float ypos, GameObject overlayInstance, float fontSize = -1)
 		{
-			// I really should make a helper function for this.
-			CorruptionDeltaNumber = new GameObject("CorruptionDeltaNumber");
-			CorruptionDeltaNumber.transform.SetParent(instance.transform, false);
+			GameObject CorruptionDeltaNumber = new(name);
+			CorruptionDeltaNumber.transform.SetParent(overlayInstance.transform, false);
 			RectTransform CorruptionDeltaNumberTransform = CorruptionDeltaNumber.AddComponent<RectTransform>();
 			CorruptionDeltaNumberTransform.anchorMin = Vector2.zero;
 			CorruptionDeltaNumberTransform.anchorMax = Vector2.one;
 			CorruptionDeltaNumberTransform.sizeDelta = Vector2.zero;
-			CorruptionDeltaNumberTransform.anchoredPosition = new Vector2(30f, 60f);
+			CorruptionDeltaNumberTransform.anchoredPosition = new Vector2(30f, ypos);
 			TextMeshProUGUI CorruptionDeltaNumberText = CorruptionDeltaNumber.AddComponent<TextMeshProUGUI>();
 			CorruptionDeltaNumberText.alignment = TextAlignmentOptions.Left;
-			CorruptionDeltaNumberText.horizontalAlignment = HorizontalAlignmentOptions.Center;
+			CorruptionDeltaNumberText.horizontalAlignment = HorizontalAlignmentOptions.Left;
 			CorruptionDeltaNumberText.verticalAlignment = VerticalAlignmentOptions.Middle;
+			if (fontSize != -1)
+			{
+				CorruptionDeltaNumberText.fontSize = fontSize;
+			}
 
-			//CorruptionDeltaNoticeObjects[0] = CorruptionDeltaNumber;
-			CorruptionDeltaNoticeObjects.Add(CorruptionDeltaNumber);
+			return CorruptionDeltaNumber;
+		}
 
-			GameObject CorruptionDeltaNumber2 = new GameObject("CorruptionDeltaNumber2");
-			CorruptionDeltaNumber2.transform.SetParent(instance.transform, false);
-			RectTransform CorruptionDeltaNumber2Transform = CorruptionDeltaNumber2.AddComponent<RectTransform>();
-			CorruptionDeltaNumber2Transform.anchorMin = Vector2.zero;
-			CorruptionDeltaNumber2Transform.anchorMax = Vector2.one;
-			CorruptionDeltaNumber2Transform.sizeDelta = Vector2.zero;
-			CorruptionDeltaNumber2Transform.anchoredPosition = new Vector2(30f, 85f);
-			TextMeshProUGUI CorruptionDeltaNumber2Text = CorruptionDeltaNumber2.AddComponent<TextMeshProUGUI>();
-			CorruptionDeltaNumber2Text.fontSize = 24;
-			CorruptionDeltaNumber2Text.alignment = TextAlignmentOptions.Left;
-			CorruptionDeltaNumber2Text.horizontalAlignment = HorizontalAlignmentOptions.Center;
-			CorruptionDeltaNumber2Text.verticalAlignment = VerticalAlignmentOptions.Middle;
-
-			CorruptionDeltaNoticeObjects.Add(CorruptionDeltaNumber2);
-
-			GameObject CorruptionDeltaNumber3 = new GameObject("CorruptionDeltaNumber3");
-			CorruptionDeltaNumber3.transform.SetParent(instance.transform, false);
-			RectTransform CorruptionDeltaNumber3Transform = CorruptionDeltaNumber3.AddComponent<RectTransform>();
-			CorruptionDeltaNumber3Transform.anchorMin = Vector2.zero;
-			CorruptionDeltaNumber3Transform.anchorMax = Vector2.one;
-			CorruptionDeltaNumber3Transform.sizeDelta = Vector2.zero;
-			CorruptionDeltaNumber3Transform.anchoredPosition = new Vector2(30f, 105f);
-			TextMeshProUGUI CorruptionDeltaNumber3Text = CorruptionDeltaNumber3.AddComponent<TextMeshProUGUI>();
-			CorruptionDeltaNumber3Text.fontSize = 24;
-			CorruptionDeltaNumber3Text.alignment = TextAlignmentOptions.Left;
-			CorruptionDeltaNumber3Text.horizontalAlignment = HorizontalAlignmentOptions.Center;
-			CorruptionDeltaNumber3Text.verticalAlignment = VerticalAlignmentOptions.Middle;
-
-			CorruptionDeltaNoticeObjects.Add(CorruptionDeltaNumber3);
+		private void VoidSurvivorController_OnOverlayInstanceAdded(On.RoR2.VoidSurvivorController.orig_OnOverlayInstanceAdded orig, VoidSurvivorController self, OverlayController controller, GameObject instance)
+		{
+			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber", 60, instance));
+			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber2", 85, instance, 24));
+			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber3", 105, instance, 24));
 
 			CorruptionTimerObject = new GameObject("CorruptionTimerObject");
 			CorruptionTimerObject.transform.SetParent(instance.transform, false);
@@ -363,43 +348,58 @@ namespace VoidFiendHudTweaks
 			CorruptionTimerTransform.anchorMin = Vector2.zero;
 			CorruptionTimerTransform.anchorMax = Vector2.one;
 			CorruptionTimerTransform.sizeDelta = Vector2.zero;
-			CorruptionTimerTransform.anchoredPosition = new Vector2(-145f, 02.5f);
+			CorruptionTimerTransform.anchoredPosition = new Vector2(-145f, 2.5f);
 			TimerText CorruptionTimerText = CorruptionTimerObject.AddComponent<TimerText>();
 			CorruptionTimerText.format = ScriptableObject.CreateInstance<TimerStringFormatter>();
+
+			TimerStringFormatter.Format.Unit[] newUnits = [];
+
+			// If player is using a mod that increases the amount of time for a corruption state to over a minute, show them minutes!
+			if ((self.maxCorruption / Mathf.Abs(self.corruptionFractionPerSecondWhileCorrupted * 100f) > 60f) ||
+				self.maxCorruption / self.corruptionPerSecondOutOfCombat > 60f ||
+				self.maxCorruption / self.corruptionPerSecondInCombat > 60f)
+			{
+				newUnits = newUnits.AddToArray(new TimerStringFormatter.Format.Unit
+				{
+					name = "minutes",
+					conversionRate = 60.0,
+					maxDigits = 2u,
+					minDigits = 2u,
+					prefix = string.Empty,
+					suffix = ":"
+				});
+
+				// move this so that the colon is more centered.
+				CorruptionTimerTransform.anchoredPosition = new Vector2(-135, 2.5f);
+			}
+
+			newUnits = newUnits.AddRangeToArray([
+				new TimerStringFormatter.Format.Unit
+				{
+					name = "seconds",
+					conversionRate = 1.0,
+					maxDigits = 2u,
+					minDigits = 2u,
+					prefix = string.Empty,
+					suffix = string.Empty
+				},
+				new TimerStringFormatter.Format.Unit
+				{
+					name = "centiseconds",
+					conversionRate = 0.01,
+					maxDigits = 2u,
+					minDigits = 2u,
+					prefix = "<voffset=0.4em><size=40%><mspace=0.5em>.",
+					suffix = "</size></voffset></mspace>"
+				}
+			]);
+
+
 			CorruptionTimerText.format.format = new TimerStringFormatter.Format
 			{
 				prefix = "<mspace=0.5em>",
 				suffix = "</mspace>",
-				units =
-				[
-					//new TimerStringFormatter.Format.Unit
-					//{
-					//	name = "minutes",
-					//	conversionRate = 60.0,
-					//	maxDigits = 2u,
-					//	minDigits = 2u,
-					//	prefix = string.Empty,
-					//	suffix = string.Empty
-					//},
-					new TimerStringFormatter.Format.Unit
-					{
-						name = "seconds",
-						conversionRate = 1.0,
-						maxDigits = 2u,
-						minDigits = 2u,
-						prefix = string.Empty,
-						suffix = string.Empty
-					},
-					new TimerStringFormatter.Format.Unit
-					{
-						name = "centiseconds",
-						conversionRate = 0.01,
-						maxDigits = 2u,
-						minDigits = 2u,
-						prefix = "<voffset=0.4em><size=40%><mspace=0.5em>.",
-						suffix = "</size></voffset></mspace>"
-					}
-				]
+				units = newUnits
 			};
 			TextMeshProUGUI CorruptionTimerText2 = CorruptionTimerText.targetLabel = CorruptionTimerObject.AddComponent<TextMeshProUGUI>();
 			CorruptionTimerText2.alignment = TextAlignmentOptions.Center;
@@ -444,14 +444,16 @@ namespace VoidFiendHudTweaks
 			orig(self, controller, instance);
 		}
 
-		private void VoidSurvivorController_AddCorruption(On.RoR2.VoidSurvivorController.orig_AddCorruption orig, VoidSurvivorController self, float amount)
+		private void VoidSurvivorController_OnCorruptionModified(On.RoR2.VoidSurvivorController.orig_OnCorruptionModified orig, VoidSurvivorController self, float newCorruption)
 		{
 			float oldCorruption = self.corruption;
 
-			orig(self, amount);
+			orig(self, newCorruption);
+
 			// Just skip everything if we're perma corrupted
-			if (!self.isPermanentlyCorrupted)
+			if (!self.isPermanentlyCorrupted && ConfigCorruptionDelta.Value)
 			{
+				float corruptionDelta = newCorruption - oldCorruption;
 				// copied from RoR2 code. I hate this code.
 				// Out of combat and in combat numbers are the same, but some mods may use it so...
 				float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
@@ -463,19 +465,16 @@ namespace VoidFiendHudTweaks
 				// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
 				// But this probably should have a better check just in case somehow you add 100 or more or smth
 				// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
-				if (!Mathf.Approximately(amount, num * Time.fixedDeltaTime) && Mathf.Abs(amount) != 100f)
+				if (!Mathf.Approximately(corruptionDelta, num * Time.fixedDeltaTime) && Mathf.Abs(corruptionDelta) != 100f)
 				{
-					CorruptionDeltaNotice newNotice = new CorruptionDeltaNotice();
-					//if (ConfigCorruptionDelta.Value && !CorruptionDeltaNumber.activeSelf)
-					//{
-					//	CorruptionDeltaNumber.SetActive(true);
-					//}
-
-					newNotice.ElementTimer = 0f;
+					CorruptionDeltaNotice newNotice = new()
+					{
+						ElementTimer = 0f
+					};
 
 					StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
 
-					if (amount > 0)
+					if (corruptionDelta > 0)
 					{
 						newNotice.PositiveDelta = true;
 						stringBuilder.Append("+");
@@ -488,24 +487,24 @@ namespace VoidFiendHudTweaks
 
 					if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
 					{
-						amount = (amount / (self.maxCorruption - self.minimumCorruption)) * 100;
+						corruptionDelta = (corruptionDelta / (self.maxCorruption - self.minimumCorruption)) * 100;
 					}
-					else if (!self.isCorrupted && oldCorruption + amount < self.minimumCorruption)
+					else if (!self.isCorrupted && oldCorruption + newCorruption < self.minimumCorruption)
 					{
 						// Clamp corruption removed by supress to only show the actual delta
 						// ex: corruption 30, minCorruption 20
 						// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
-						amount = -(oldCorruption - self.corruption);
+						corruptionDelta = -(oldCorruption - self.corruption);
 					}
 
 					// If the delta is less than 1, early out before we actually set the values.
 					// We need this here because we may sometimes modify the delta
-					if (Mathf.Abs(amount) < 1)
+					if (Mathf.Abs(corruptionDelta) < 1)
 					{
 						return;
 					}
 
-					stringBuilder.AppendInt(Mathf.FloorToInt(amount), 1u, 3u).Append("%");
+					stringBuilder.AppendInt(Mathf.FloorToInt(corruptionDelta), 1u, 3u).Append("%");
 					newNotice.DeltaValue = stringBuilder.ToString();
 					HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
 
@@ -581,7 +580,7 @@ namespace VoidFiendHudTweaks
 
 			ConfigCorruptionDelta = Config.Bind(
 				"UI Tweaks",
-				"Show Corruption Delta Number",
+				"Show Corruption Delta Notices",
 				false,
 				"Show next to the corruption UI the exact amount added or removed to your corruption percentage" +
 				"\nPassive corruption buildup/removal is not shown as part of this delta" +
@@ -590,26 +589,17 @@ namespace VoidFiendHudTweaks
 				);
 			ConfigCorruptionDeltaPositiveColor = Config.Bind(
 				"UI Tweaks",
-				"Corruption Delta Number Positive Color",
+				"Corruption Delta Notice Positive Color",
 				Color.green,
-				"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
+				"The color that will be used for positive corruption changes if \"Show Corruption Delta Notice\" is enabled" +
 				"\n\nDefault: 00FF00FF"
 				);
 			ConfigCorruptionDeltaNegativeColor = Config.Bind(
 				"UI Tweaks",
-				"Corruption Delta Number Negative Color",
+				"Corruption Delta Notice Negative Color",
 				Color.red,
-				"The color that will be used for positive corruption changes if \"Show Corruption Delta Number\" is enabled" +
+				"The color that will be used for positive corruption changes if \"Show Corruption Delta Notice\" is enabled" +
 				"\n\nDefault: FF0000FF"
-				);
-
-			ConfigShowPermaCorruptionMin = Config.Bind(
-				"UI Tweaks",
-				"Clamp Corruption Percentage to 100%",
-				true,
-				"When disabled, show the minimum corruption when permanently corrupted rather than capping it to 100%" +
-				"\nJust for fun." +
-				"\n\nDefault: True"
 				);
 
 			ConfigShowCorruptionTimerWhenUncorrupted = Config.Bind(
@@ -625,6 +615,15 @@ namespace VoidFiendHudTweaks
 				false,
 				"Show timer until no longer corrupted underneath corruption UI" +
 				"\n\nDefault: False"
+				);
+
+			ConfigShowPermaCorruptionMin = Config.Bind(
+				"UI Tweaks",
+				"Clamp Corruption Percentage to 100%",
+				true,
+				"When disabled, show the minimum corruption when permanently corrupted rather than capping it to 100%" +
+				"\nJust for fun." +
+				"\n\nDefault: True"
 				);
 
 			// can't figure this out, come back to it later.
@@ -645,10 +644,10 @@ namespace VoidFiendHudTweaks
 				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaPositiveColor, delegate () { return !ConfigCorruptionDelta.Value; });
 				RiskOfOptionsCompatibility.AddColorOption(ConfigCorruptionDeltaNegativeColor, delegate () { return !ConfigCorruptionDelta.Value; });
 
-				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigShowPermaCorruptionMin);
-
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigShowCorruptionTimerWhenUncorrupted);
 				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigShowCorruptionTimerWhenCorrupted);
+
+				RiskOfOptionsCompatibility.AddCheckBoxOption(ConfigShowPermaCorruptionMin);
 
 				RiskOfOptionsCompatibility.InvokeSetModDescription("Tweak various things about the Void Fiend corruption hud to fit your liking");
 			}
@@ -657,7 +656,7 @@ namespace VoidFiendHudTweaks
 		// Due to dictionary being limited to single types, all values are stored as strings, you will have to parse them yourself.
 		public Dictionary<string, string> GetSerializedValues(HG.GeneralSerializer.SerializedField[] serializedFields)
 		{
-			Dictionary<string, string> KVDict = new Dictionary<string, string>();
+			Dictionary<string, string> KVDict = [];
 
 			foreach (var serializedField in serializedFields)
 			{
