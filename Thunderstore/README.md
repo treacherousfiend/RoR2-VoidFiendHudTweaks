@@ -13,25 +13,37 @@ If you have any bug reports, suggestions, etc. Please make an issue post on the 
 
 Enabled by default.
 
-A toggle to have the corruption meter *always* decrement to 0% when corrupted, no matter what your minimum corruption is.<br>
+A toggle to have the corruption meter *always* decrement to 0% when corrupted, no matter what your minimum corruption is.
+
+![CorruptionPercentageTweak](https://raw.githubusercontent.com/treacherousfiend/RoR2-VoidFiendHudTweaks/main/assets/CorruptionPercentageTweak.png)
+
 Hopefully makes a bit clearer that the duration of your corrupted form is NOT changed the more void items you have.<br>
 The downside to this is that it makes changes to your corruption appear larger than they actually are. Because of this, I recommend using the "Show  Meter Suppress Corruption Delta" option so that you'll always know how much the Corrupted Suppress ability will add.
 
 ### Show Meter Suppress Heal Delta & Show Meter Suppress Corruption Delta
 
-Show on the corruption meter how much corruption will be removed by Suppress, Corrupted Suppress, or other (likely modded) special skill.<br>
-and the delta meter is hidden if you cannot use the ability (either due to not having any charges or because you have a replacement skill that does not affect corruption).<br>
+Show on the corruption meter how much corruption will be removed by Suppress, Corrupted Suppress, or other (likely modded) special skill.
+
+![HealthSuppressDelta](https://raw.githubusercontent.com/treacherousfiend/RoR2-VoidFiendHudTweaks/main/assets/SuppressHealDelta.png)
+
+The delta meter is hidden if you cannot use the ability (either due to not having any charges or because you have a replacement skill that does not affect corruption).<br>
 Colors are customizable for when corrupted and when not corrupted.
 
 ### Show Corruption Delta Notices
 
-Show a number to the right of the hud meter when a change has been made to your corruption (i.e. -25% from using Suppress).<br>
+Show a number to the right of the hud meter when a change has been made to your corruption (i.e. -25% from using Suppress).
+
+![CorruptionDeltaNotice](https://raw.githubusercontent.com/treacherousfiend/RoR2-VoidFiendHudTweaks/main/assets/CorruptionDeltaNotice.png)
+
 Shows the 3 most recent notices, passive corruption changes are not shown.<br>
 Colors is customizable for positive and negative changes.
 
 ### Show Corruption Timer && Show Corruption Timer While Corrupted
 
-Show a timer underneath the hud meter which counts down until you either become corrupted or uncorrupted.<br>
+Show a timer underneath the hud meter which counts down until you either become corrupted or uncorrupted.
+
+![CorruptionTimer](https://raw.githubusercontent.com/treacherousfiend/RoR2-VoidFiendHudTweaks/main/assets/CorruptionTimer.png)
+
 If you have a mod that increases the time of either form to over 1 minute, the timer should also show minutes.
 
 ### Clamp Corruption Percentage to 100%
