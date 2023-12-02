@@ -2,7 +2,8 @@
 
 A collection of customizable tweaks for Void Fiend's corruption hud to hopefully make the convoluted mechanic a bit easier to understand for some people (aka me)
 
-If you're only here for mod downloads, you'll find more info on the Thunderstore page.
+If you're only here for mod downloads, you'll find more info on the Thunderstore page.<br>
+https://thunderstore.io/package/fiendtopia/VoidFiendHudTweaks/
 
 ## To-Do
 
