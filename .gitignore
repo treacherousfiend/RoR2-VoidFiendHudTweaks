@@ -331,3 +331,4 @@ ASALocalRun/
 
 # don't provide DLL files, only do that via releases.
 *.dll
+*.zip

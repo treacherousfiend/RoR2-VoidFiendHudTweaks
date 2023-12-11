@@ -338,6 +338,7 @@ namespace VoidFiendHudTweaks
 
 		private void VoidSurvivorController_OnOverlayInstanceAdded(On.RoR2.VoidSurvivorController.orig_OnOverlayInstanceAdded orig, VoidSurvivorController self, OverlayController controller, GameObject instance)
 		{
+			CorruptionDeltaNoticeObjects = []; // Make sure its empty before we add to it. Fixes NREs after going to a new stage
 			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber", 60, instance));
 			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber2", 85, instance, 24));
 			CorruptionDeltaNoticeObjects.Add(GenerateCorruptionDeltaHudElement("CorruptionDeltaNumber3", 105, instance, 24));
