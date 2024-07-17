@@ -38,7 +38,7 @@ Show a number to the right of the hud meter when a change has been made to your 
 Shows the 3 most recent notices, passive corruption changes are not shown.<br>
 Colors is customizable for positive and negative changes.
 
-### Show Corruption Timer && Show Corruption Timer While Corrupted
+### Show Corruption Timer & Show Corruption Timer While Corrupted
 
 Show a timer underneath the hud meter which counts down until you either become corrupted or uncorrupted.
 

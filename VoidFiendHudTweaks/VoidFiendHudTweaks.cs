@@ -6,6 +6,7 @@ using RoR2;
 using RoR2.HudOverlay;
 using RoR2.Skills;
 using RoR2.UI;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
@@ -230,7 +231,7 @@ namespace VoidFiendHudTweaks
 			ImageFillController baseFillUi = null;
 
 			// For now, just pick the last one in the list.
-			// In normal gameplay this should only have 1 value, but mods may change this, so for compat this should be more indepth. 
+			// In normal gameplay this should only have 1 value, but mods may change this, so for compat this should be more indepth.
 			foreach (ImageFillController fillUi in self.fillUiList)
 			{
 				baseFillUi = fillUi;
@@ -451,73 +452,76 @@ namespace VoidFiendHudTweaks
 
 			orig(self, newCorruption);
 
-			// Just skip everything if we're perma corrupted
-			if (!self.isPermanentlyCorrupted && ConfigCorruptionDelta.Value)
+			foreach (LocalUser localPlayers in LocalUserManager.readOnlyLocalUsersList)
 			{
-				float corruptionDelta = newCorruption - oldCorruption;
-				// copied from RoR2 code. I hate this code.
-				// Out of combat and in combat numbers are the same, but some mods may use it so...
-				float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
-					(self.characterBody.outOfCombat ?
-						self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
-					: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
-
-				// Don't show the delta if its passive corruption
-				// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
-				// But this probably should have a better check just in case somehow you add 100 or more or smth
-				// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
-				if (!Mathf.Approximately(corruptionDelta, num * Time.fixedDeltaTime) && Mathf.Abs(corruptionDelta) != 100f)
+				// Just skip everything if we're perma corrupted, if the setting is disabled, or if we're not even the player causing the modification
+				if (ConfigCorruptionDelta.Value && localPlayers.cachedBody == self.characterBody && !self.isPermanentlyCorrupted)
 				{
-					CorruptionDeltaNotice newNotice = new()
-					{
-						ElementTimer = 0f
-					};
+					float corruptionDelta = newCorruption - oldCorruption;
+					// copied from RoR2 code. I hate this code.
+					// Out of combat and in combat numbers are the same, but some mods may use it so...
+					float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
+						(self.characterBody.outOfCombat ?
+							self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
+						: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
 
-					StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
-
-					if (corruptionDelta > 0)
+					// Don't show the delta if its passive corruption
+					// HACK: also don't show if delta is 100. in theory should only happen on corruption state transitions
+					// But this probably should have a better check just in case somehow you add 100 or more or smth
+					// since a mod might change the values to go over 100 normally, so checking for 100 is bad 
+					if (!Mathf.Approximately(corruptionDelta, num * Time.fixedDeltaTime) && Mathf.Abs(corruptionDelta) != 100f)
 					{
-						newNotice.PositiveDelta = true;
-						stringBuilder.Append("+");
+						CorruptionDeltaNotice newNotice = new()
+						{
+							ElementTimer = 0f
+						};
+
+						StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+
+						if (corruptionDelta > 0)
+						{
+							newNotice.PositiveDelta = true;
+							stringBuilder.Append("+");
+						}
+						else
+						{
+							// Don't need to append "-" here because its already part of the float value
+							newNotice.PositiveDelta = false;
+						}
+
+						if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
+						{
+							corruptionDelta = (corruptionDelta / (self.maxCorruption - self.minimumCorruption)) * 100;
+						}
+						else if (!self.isCorrupted && oldCorruption + newCorruption < self.minimumCorruption)
+						{
+							// Clamp corruption removed by supress to only show the actual delta
+							// ex: corruption 30, minCorruption 20
+							// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
+							corruptionDelta = -(oldCorruption - self.corruption);
+						}
+
+						// If the delta is less than 1, early out before we actually set the values.
+						// We need this here because we may sometimes modify the delta
+						if (Mathf.Abs(corruptionDelta) < 1)
+						{
+							return;
+						}
+
+						stringBuilder.AppendInt(Mathf.FloorToInt(corruptionDelta), 1u, 3u).Append("%");
+						newNotice.DeltaValue = stringBuilder.ToString();
+						HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
+
+						if (CorruptionDeltaNoticeList.Count >= 3)
+						{
+							CorruptionDeltaNoticeList.RemoveRange(2, CorruptionDeltaNoticeList.Count - 2);
+						}
+						// Make sure to insert at the START of the list.
+						CorruptionDeltaNoticeList.Insert(0, newNotice);
+						CorruptionDeltaNoticeList.TrimExcess();
+
+						UpdateCorruptionDeltaNotices();
 					}
-					else
-					{
-						// Don't need to append "-" here because its already part of the float value
-						newNotice.PositiveDelta = false;
-					}
-
-					if (ConfigCorruptionPercentageTweak.Value && self.isCorrupted)
-					{
-						corruptionDelta = (corruptionDelta / (self.maxCorruption - self.minimumCorruption)) * 100;
-					}
-					else if (!self.isCorrupted && oldCorruption + newCorruption < self.minimumCorruption)
-					{
-						// Clamp corruption removed by supress to only show the actual delta
-						// ex: corruption 30, minCorruption 20
-						// using supress will bring corruption to 20, and the delta will show -10% instead of -25%
-						corruptionDelta = -(oldCorruption - self.corruption);
-					}
-
-					// If the delta is less than 1, early out before we actually set the values.
-					// We need this here because we may sometimes modify the delta
-					if (Mathf.Abs(corruptionDelta) < 1)
-					{
-						return;
-					}
-
-					stringBuilder.AppendInt(Mathf.FloorToInt(corruptionDelta), 1u, 3u).Append("%");
-					newNotice.DeltaValue = stringBuilder.ToString();
-					HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
-
-					if (CorruptionDeltaNoticeList.Count >= 3)
-					{
-						CorruptionDeltaNoticeList.RemoveRange(2, CorruptionDeltaNoticeList.Count - 2);
-					}
-					// Make sure to insert at the START of the list.
-					CorruptionDeltaNoticeList.Insert(0, newNotice);
-					CorruptionDeltaNoticeList.TrimExcess();
-
-					UpdateCorruptionDeltaNotices();
 				}
 			}
 		}
@@ -525,6 +529,9 @@ namespace VoidFiendHudTweaks
 		// The Awake() method is run at the very start when the game is initialized.
 		public void Awake()
 		{
+#if DEBUG
+			On.RoR2.Networking.NetworkManagerSystemSteam.OnClientConnect += (s, u, t) => { };
+#endif
 			// Init our logging class so that we can properly log for debugging
 			Log.Init(Logger);
 
@@ -627,8 +634,16 @@ namespace VoidFiendHudTweaks
 				"\n\nDefault: True"
 				);
 
-			// can't figure this out, come back to it later.
-			//ConfigCorruptionDelta.SettingChanged += (new object(), new SettingChangedEventArgs()) => CorruptionDeltaNumber.SetActive(ConfigCorruptionDelta.Value);
+#if DEBUG
+			// hell on earth. damnation. demons. devils. i hate reading this
+			ConfigCorruptionPercentageTweak.SettingChanged += ConfigCorruptionPercentageTweak_SettingChanged;
+			ConfigSuppressHealDelta.SettingChanged += ConfigSuppressHealDelta_SettingChanged;
+			ConfigSuppressCorruptDelta.SettingChanged += ConfigSuppressCorruptDelta_SettingChanged;
+			ConfigCorruptionDelta.SettingChanged += ConfigCorruptionDelta_SettingChanged;
+			ConfigShowCorruptionTimerWhenUncorrupted.SettingChanged += ConfigShowCorruptionTimerWhenUncorrupted_SettingChanged;
+			ConfigShowCorruptionTimerWhenCorrupted.SettingChanged += ConfigShowCorruptionTimerWhenCorrupted_SettingChanged;
+			ConfigShowPermaCorruptionMin.SettingChanged += ConfigShowPermaCorruptionMin_SettingChanged;
+#endif
 
 			// Only do this is RiskOfOptions is installed!
 			if (RiskOfOptionsCompatibility.Enabled)
@@ -653,6 +668,43 @@ namespace VoidFiendHudTweaks
 				RiskOfOptionsCompatibility.InvokeSetModDescription("Tweak various things about the Void Fiend corruption hud to fit your liking");
 			}
 		}
+
+#if DEBUG
+		private void ConfigCorruptionPercentageTweak_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigSuppressHealDelta_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigSuppressCorruptDelta_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigCorruptionDelta_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigShowCorruptionTimerWhenUncorrupted_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigShowCorruptionTimerWhenCorrupted_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+
+		private void ConfigShowPermaCorruptionMin_SettingChanged(object sender, EventArgs e)
+		{
+			throw new NotImplementedException();
+		}
+#endif
 
 		// Due to dictionary being limited to single types, all values are stored as strings, you will have to parse them yourself.
 		public Dictionary<string, string> GetSerializedValues(HG.GeneralSerializer.SerializedField[] serializedFields)
