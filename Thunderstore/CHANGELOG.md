@@ -1,3 +1,8 @@
+## 1.0.3
+- Update for SotS
+- Fixed timer while corrupted being inaccurate
+- Reduced dependencies down to just R2API Core (it downloads the other dependencies anyway)
+
 ## 1.0.2
 - Fix error spam in console when another player modifies their own corruption if Corruption Delta Notices was enabled
 

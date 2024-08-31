@@ -57,6 +57,10 @@ For fun, you can disable it just to see how high your corruption *really* is.
 
 Fixed a vanilla bug which caused the percentage to flicker between minimum corruption and 100% if your minimum corruption was over 100%
 
+## Known Issues:
+
+With Corruption Delta Notices enabled, adding 2 notices at the same time (say from a crit and leeching seed) will cause one of them to not be removed until overwritten by a new one.
+
 <br>
 
 ## For mod devs:

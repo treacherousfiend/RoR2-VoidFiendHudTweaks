@@ -6,7 +6,6 @@ using RoR2;
 using RoR2.HudOverlay;
 using RoR2.Skills;
 using RoR2.UI;
-using System;
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
@@ -16,7 +15,7 @@ using UnityEngine.UI;
 
 namespace VoidFiendHudTweaks
 {
-	// Add Risk of Options dependency
+	// Add Risk of Options soft dependency
 	[BepInDependency("com.rune580.riskofoptions", BepInDependency.DependencyFlags.SoftDependency)]
 
 	[BepInDependency(R2API.R2API.PluginGUID)]
@@ -36,8 +35,8 @@ namespace VoidFiendHudTweaks
 	{
 		public const string PluginGUID = PluginAuthor + "." + PluginName;
 		public const string PluginAuthor = "treacherousfiend";
-		public const string PluginName = "Void-Fiend-UI-Tweak";
-		public const string PluginVersion = "1.0.0";
+		public const string PluginName = "Void-Fiend-Hud-Tweaks";
+		public const string PluginVersion = "1.0.3";
 
 		public static ConfigEntry<bool> ConfigCorruptionPercentageTweak { get; set; }
 
@@ -108,7 +107,8 @@ namespace VoidFiendHudTweaks
 					}
 
 					CorruptionTimerObject.SetActive(true);
-					secondsToCorruption = (survivorController.corruption - survivorController.minimumCorruption) / Mathf.Abs(survivorController.corruptionFractionPerSecondWhileCorrupted * 100f);
+					secondsToCorruption = (survivorController.corruption - survivorController.minimumCorruption) / Mathf.Abs(survivorController.corruptionFractionPerSecondWhileCorrupted
+						* (survivorController.maxCorruption - survivorController.minimumCorruption));
 				}
 				else
 				{
@@ -299,23 +299,6 @@ namespace VoidFiendHudTweaks
 			}
 		}
 
-		private void RecursiveFindGameObjectChildren(Transform gameObjectTransform, int indentCount)
-		{
-			foreach (Transform childTransform in gameObjectTransform)
-			{
-				int i;
-				string DebugString = "";
-				for (i = 0; i <= indentCount; i++)
-				{
-					DebugString += "\t";
-				}
-
-				Debug.Log(DebugString + childTransform.gameObject);
-
-				RecursiveFindGameObjectChildren(childTransform.transform, i + 1);
-			}
-		}
-
 		private GameObject GenerateCorruptionDeltaHudElement(string name, float ypos, GameObject overlayInstance, float fontSize = -1)
 		{
 			GameObject CorruptionDeltaNumber = new(name);
@@ -459,8 +442,9 @@ namespace VoidFiendHudTweaks
 				{
 					float corruptionDelta = newCorruption - oldCorruption;
 					// copied from RoR2 code. I hate this code.
+					// UPDATE: slightly modified to just check isCorrupted, its the same thing as what they do anyway, but looks nicer.
 					// Out of combat and in combat numbers are the same, but some mods may use it so...
-					float num = ((!self.characterBody.HasBuff(self.corruptedBuffDef)) ?
+					float num = ((!self.isCorrupted) ?
 						(self.characterBody.outOfCombat ?
 							self.corruptionPerSecondOutOfCombat : self.corruptionPerSecondInCombat)
 						: (self.corruptionFractionPerSecondWhileCorrupted * (self.maxCorruption - self.minimumCorruption)));
